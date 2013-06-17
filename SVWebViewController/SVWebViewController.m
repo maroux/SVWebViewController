@@ -20,6 +20,8 @@
 @property (nonatomic, strong) UIWebView *mainWebView;
 @property (nonatomic, strong) NSURL *URL;
 
+@property (nonatomic, strong) id<UIWebViewDelegate> delegate;
+
 - (id)initWithAddress:(NSString*)urlString;
 - (id)initWithURL:(NSURL*)URL;
 - (void)loadURL:(NSURL*)URL;
@@ -124,10 +126,19 @@
     return [self initWithURL:[NSURL URLWithString:urlString]];
 }
 
+- (id)initWithAddress:(NSString*)urlString delegate: (id<UIWebViewDelegate>) delegate
+{
+    return [self initWithURL:[NSURL URLWithString:urlString] delegate: delegate];
+}
+
 - (id)initWithURL:(NSURL*)pageURL {
-    
+    return [self initWithURL: pageURL delegate: nil];
+}
+
+- (id)initWithURL:(NSURL*)pageURL delegate: (id<UIWebViewDelegate>) delegate{
     if(self = [super init]) {
         self.URL = pageURL;
+        self.delegate = delegate;
         self.availableActions = SVWebViewControllerAvailableActionsOpenInSafari | SVWebViewControllerAvailableActionsOpenInChrome | SVWebViewControllerAvailableActionsMailLink;
     }
     
@@ -199,6 +210,8 @@
     [mainWebView stopLoading];
  	[[UIApplication sharedApplication] setNetworkActivityIndicatorVisible:NO];
     mainWebView.delegate = nil;
+    self.delegate = nil;
+    [super dealloc];
 }
 
 #pragma mark - Toolbar
@@ -220,18 +233,15 @@
         
         if(self.availableActions == 0) {
             toolbarWidth = 200.0f;
-            items = [NSArray arrayWithObjects:
-                     fixedSpace,
+            items = @[fixedSpace,
                      refreshStopBarButtonItem,
                      flexibleSpace,
                      self.backBarButtonItem,
                      flexibleSpace,
                      self.forwardBarButtonItem,
-                     fixedSpace,
-                     nil];
+                     fixedSpace];
         } else {
-            items = [NSArray arrayWithObjects:
-                     fixedSpace,
+            items = @[fixedSpace,
                      refreshStopBarButtonItem,
                      flexibleSpace,
                      self.backBarButtonItem,
@@ -239,8 +249,7 @@
                      self.forwardBarButtonItem,
                      flexibleSpace,
                      self.actionBarButtonItem,
-                     fixedSpace,
-                     nil];
+                     fixedSpace];
         }
         
         UIToolbar *toolbar = [[UIToolbar alloc] initWithFrame:CGRectMake(0.0f, 0.0f, toolbarWidth, 44.0f)];
@@ -254,18 +263,15 @@
         NSArray *items;
         
         if(self.availableActions == 0) {
-            items = [NSArray arrayWithObjects:
-                     flexibleSpace,
+            items = @[flexibleSpace,
                      self.backBarButtonItem, 
                      flexibleSpace,
                      self.forwardBarButtonItem,
                      flexibleSpace,
                      refreshStopBarButtonItem,
-                     flexibleSpace,
-                     nil];
+                     flexibleSpace];
         } else {
-            items = [NSArray arrayWithObjects:
-                     fixedSpace,
+            items = @[fixedSpace,
                      self.backBarButtonItem, 
                      flexibleSpace,
                      self.forwardBarButtonItem,
@@ -273,8 +279,7 @@
                      refreshStopBarButtonItem,
                      flexibleSpace,
                      self.actionBarButtonItem,
-                     fixedSpace,
-                     nil];
+                     fixedSpace];
         }
         
 				self.navigationController.toolbar.barStyle = self.navigationController.navigationBar.barStyle;
@@ -287,12 +292,16 @@
 #pragma mark UIWebViewDelegate
 
 - (void)webViewDidStartLoad:(UIWebView *)webView {
+    if (self.delegate != nil && [self.delegate respondsToSelector: @selector(webViewDidStartLoad:)])
+        [self.delegate webViewDidStartLoad: webView];
 	[[UIApplication sharedApplication] setNetworkActivityIndicatorVisible:YES];
     [self updateToolbarItems];
 }
 
 
 - (void)webViewDidFinishLoad:(UIWebView *)webView {
+    if (self.delegate != nil && [self.delegate respondsToSelector: @selector(webViewDidFinishLoad:)])
+        [self.delegate webViewDidFinishLoad: webView];
 	[[UIApplication sharedApplication] setNetworkActivityIndicatorVisible:NO];
     
     self.navigationItem.title = [webView stringByEvaluatingJavaScriptFromString:@"document.title"];
@@ -300,8 +309,17 @@
 }
 
 - (void)webView:(UIWebView *)webView didFailLoadWithError:(NSError *)error {
+    if (self.delegate != nil && [self.delegate respondsToSelector: @selector(webView:didFailLoadWithError:)])
+        [self.delegate webView: webView didFailLoadWithError: error];
 	[[UIApplication sharedApplication] setNetworkActivityIndicatorVisible:NO];
     [self updateToolbarItems];
+}
+
+- (BOOL)webView:(UIWebView *)webView shouldStartLoadWithRequest:(NSURLRequest *)request navigationType:(UIWebViewNavigationType)navigationType
+{
+    if (self.delegate != nil && [self.delegate respondsToSelector: @selector(webView:shouldStartLoadWithRequest:navigationType:)])
+        return [self.delegate webView: webView shouldStartLoadWithRequest: request navigationType: navigationType];
+    return YES;
 }
 
 #pragma mark - Target actions

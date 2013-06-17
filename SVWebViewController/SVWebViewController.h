@@ -13,6 +13,7 @@
 @interface SVWebViewController : UIViewController
 
 - (id)initWithAddress:(NSString*)urlString;
+- (id)initWithAddress:(NSString*)urlString delegate: (id<UIWebViewDelegate>) delegate;
 - (id)initWithURL:(NSURL*)URL;
 
 @property (nonatomic, readwrite) SVWebViewControllerAvailableActions availableActions;
