@@ -194,6 +194,7 @@
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
+    [super viewDidDisappear:animated];
     [[UIApplication sharedApplication] setNetworkActivityIndicatorVisible:NO];
 }
 
