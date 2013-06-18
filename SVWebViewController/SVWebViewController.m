@@ -8,7 +8,25 @@
 
 #import "SVWebViewController.h"
 
-@interface SVWebViewController () <UIWebViewDelegate, UIActionSheetDelegate, MFMailComposeViewControllerDelegate>
+@implementation SVWebViewControllerBookmark
+
+- (id)initWithTitle:(NSString*)title andURL:(NSString*)urlString {
+    if (self = [super init]) {
+        self.title = title;
+        self.URLString = urlString;
+    }
+    return self;
+}
+
+- (void)dealloc {
+    self.title = nil;
+    self.URLString = nil;
+}
+
+@end
+
+@interface SVWebViewController () <UIWebViewDelegate, UIActionSheetDelegate, MFMailComposeViewControllerDelegate, UITableViewDataSource,
+                                    UITableViewDelegate>
 
 @property (nonatomic, strong, readonly) UIBarButtonItem *backBarButtonItem;
 @property (nonatomic, strong, readonly) UIBarButtonItem *forwardBarButtonItem;
@@ -16,6 +34,8 @@
 @property (nonatomic, strong, readonly) UIBarButtonItem *stopBarButtonItem;
 @property (nonatomic, strong, readonly) UIBarButtonItem *actionBarButtonItem;
 @property (nonatomic, strong, readonly) UIActionSheet *pageActionSheet;
+@property (nonatomic, strong, readonly) UIBarButtonItem *bookmarksBarButtonItem;
+@property (nonatomic, strong, readonly) id bookmarkPopover;
 
 @property (nonatomic, strong) UIWebView *mainWebView;
 @property (nonatomic, strong) NSURL *URL;
@@ -42,7 +62,7 @@
 @synthesize availableActions;
 
 @synthesize URL, mainWebView;
-@synthesize backBarButtonItem, forwardBarButtonItem, refreshBarButtonItem, stopBarButtonItem, actionBarButtonItem, pageActionSheet;
+@synthesize backBarButtonItem, forwardBarButtonItem, refreshBarButtonItem, stopBarButtonItem, actionBarButtonItem, pageActionSheet, bookmarksBarButtonItem, bookmarkPopover;
 
 #pragma mark - setters and getters
 
@@ -120,6 +140,34 @@
     return pageActionSheet;
 }
 
+- (id) bookmarkPopover {
+    if (!bookmarkPopover) {
+        UITableViewController *bookmarkViewController = [[UITableViewController alloc] init];
+        bookmarkViewController.title = @"Bookmarks";
+        bookmarkViewController.tableView.delegate = self;
+        bookmarkViewController.tableView.dataSource = self;
+        bookmarkViewController.contentSizeForViewInPopover = CGSizeMake(bookmarkViewController.contentSizeForViewInPopover.width,
+                                                                        bookmarkViewController.tableView.rowHeight*MAX(7, self.bookmarks.count));
+        if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+            UINavigationController *navController = [[UINavigationController alloc] initWithRootViewController: bookmarkViewController];
+            bookmarkPopover = [[UIPopoverController alloc] initWithContentViewController: navController];
+            navController = nil;
+            bookmarkViewController = nil;
+        } else {
+            bookmarkPopover = bookmarkViewController;
+        }
+    }
+    
+    return bookmarkPopover;
+}
+
+- (UIBarButtonItem*) bookmarksBarButtonItem {
+    if (!bookmarksBarButtonItem) {
+        bookmarksBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemBookmarks target:self action:@selector(bookmarkButtonClicked:)];
+    }
+    return bookmarksBarButtonItem;
+}
+
 #pragma mark - Initialization
 
 - (id)initWithAddress:(NSString *)urlString {
@@ -140,6 +188,7 @@
         self.URL = pageURL;
         self.delegate = delegate;
         self.availableActions = SVWebViewControllerAvailableActionsOpenInSafari | SVWebViewControllerAvailableActionsOpenInChrome | SVWebViewControllerAvailableActionsMailLink;
+        self.bookmarks = nil;
     }
     
     return self;
@@ -173,6 +222,9 @@
     stopBarButtonItem = nil;
     actionBarButtonItem = nil;
     pageActionSheet = nil;
+    bookmarkPopover = nil;
+    bookmarksBarButtonItem = nil;
+    _bookmarks = nil;
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -211,8 +263,7 @@
     [mainWebView stopLoading];
  	[[UIApplication sharedApplication] setNetworkActivityIndicatorVisible:NO];
     mainWebView.delegate = nil;
-    self.delegate = nil;
-    [super dealloc];
+    _delegate = nil;
 }
 
 #pragma mark - Toolbar
@@ -234,14 +285,26 @@
         
         if(self.availableActions == 0) {
             toolbarWidth = 200.0f;
-            items = @[fixedSpace,
-                     refreshStopBarButtonItem,
-                     flexibleSpace,
-                     self.backBarButtonItem,
-                     flexibleSpace,
-                     self.forwardBarButtonItem,
-                     fixedSpace];
-        } else {
+            if (self.bookmarks) {
+                items = @[fixedSpace,
+                          refreshStopBarButtonItem,
+                          flexibleSpace,
+                          self.backBarButtonItem,
+                          flexibleSpace,
+                          self.forwardBarButtonItem,
+                          flexibleSpace,
+                          self.bookmarksBarButtonItem,
+                          fixedSpace];
+            } else {
+                items = @[fixedSpace,
+                          refreshStopBarButtonItem,
+                          flexibleSpace,
+                          self.backBarButtonItem,
+                          flexibleSpace,
+                          self.forwardBarButtonItem,
+                          fixedSpace];
+            }
+        } else if (self.bookmarks) {
             items = @[fixedSpace,
                      refreshStopBarButtonItem,
                      flexibleSpace,
@@ -250,7 +313,19 @@
                      self.forwardBarButtonItem,
                      flexibleSpace,
                      self.actionBarButtonItem,
+                     flexibleSpace,
+                     self.bookmarksBarButtonItem,
                      fixedSpace];
+        } else {
+            items = @[fixedSpace,
+                      refreshStopBarButtonItem,
+                      flexibleSpace,
+                      self.backBarButtonItem,
+                      flexibleSpace,
+                      self.forwardBarButtonItem,
+                      flexibleSpace,
+                      self.actionBarButtonItem,
+                      fixedSpace];
         }
         
         UIToolbar *toolbar = [[UIToolbar alloc] initWithFrame:CGRectMake(0.0f, 0.0f, toolbarWidth, 44.0f)];
@@ -264,14 +339,26 @@
         NSArray *items;
         
         if(self.availableActions == 0) {
-            items = @[flexibleSpace,
-                     self.backBarButtonItem, 
-                     flexibleSpace,
-                     self.forwardBarButtonItem,
-                     flexibleSpace,
-                     refreshStopBarButtonItem,
-                     flexibleSpace];
-        } else {
+            if (self.bookmarks) {
+                items = @[flexibleSpace,
+                          self.backBarButtonItem,
+                          flexibleSpace,
+                          self.forwardBarButtonItem,
+                          flexibleSpace,
+                          refreshStopBarButtonItem,
+                          flexibleSpace,
+                          self.bookmarksBarButtonItem,
+                          flexibleSpace];
+            } else {
+                items = @[flexibleSpace,
+                          self.backBarButtonItem,
+                          flexibleSpace,
+                          self.forwardBarButtonItem,
+                          flexibleSpace,
+                          refreshStopBarButtonItem,
+                          flexibleSpace];
+            }
+        } else if (self.bookmarks) {
             items = @[fixedSpace,
                      self.backBarButtonItem, 
                      flexibleSpace,
@@ -280,7 +367,19 @@
                      refreshStopBarButtonItem,
                      flexibleSpace,
                      self.actionBarButtonItem,
+                     flexibleSpace,
+                     self.bookmarksBarButtonItem,
                      fixedSpace];
+        } else {
+            items = @[fixedSpace,
+                      self.backBarButtonItem,
+                      flexibleSpace,
+                      self.forwardBarButtonItem,
+                      flexibleSpace,
+                      refreshStopBarButtonItem,
+                      flexibleSpace,
+                      self.actionBarButtonItem,
+                      fixedSpace];
         }
         
 				self.navigationController.toolbar.barStyle = self.navigationController.navigationBar.barStyle;
@@ -354,6 +453,20 @@
     
 }
 
+- (void)bookmarkButtonClicked:(id)sender {
+    if(UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        if(((UIPopoverController*)bookmarkPopover).isPopoverVisible)
+            return;
+        [((UIPopoverController*)self.bookmarkPopover) presentPopoverFromBarButtonItem: self.bookmarksBarButtonItem
+                                                             permittedArrowDirections: UIPopoverArrowDirectionAny
+                                                                             animated: YES];
+    } else {
+        if(self.navigationController.topViewController == bookmarkPopover)
+            return;
+        [self.navigationController pushViewController: ((UIViewController*)self.bookmarkPopover) animated: YES];
+    }
+}
+
 - (void)doneButtonClicked:(id)sender {
 #if __IPHONE_OS_VERSION_MIN_REQUIRED < 60000
     [self dismissModalViewControllerAnimated:YES];
@@ -417,6 +530,44 @@
 	}
     
     pageActionSheet = nil;
+}
+
+#pragma mark -
+#pragma mark Table View source
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    static NSString *reuseIdentifier = @"CellIdenfitier";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier: reuseIdentifier];
+    if (!cell)
+    {
+        cell = [[UITableViewCell alloc] initWithStyle: UITableViewCellStyleDefault reuseIdentifier: reuseIdentifier];
+    }
+    cell.textLabel.text = [self.bookmarks[indexPath.row] title];
+    return cell;
+}
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+    return 1;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return self.bookmarks.count;
+}
+
+#pragma mark -
+#pragma mark Table View delegate
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        [((UIPopoverController*)self.bookmarkPopover) dismissPopoverAnimated: YES];
+    } else {
+        [self.navigationController popViewControllerAnimated: YES];
+    }
+    if (mainWebView.isLoading) {
+        [mainWebView stopLoading];
+    }
+    [mainWebView loadRequest: [NSURLRequest requestWithURL: [NSURL URLWithString: [self.bookmarks[indexPath.row] URLString]]]];
+    bookmarkPopover = nil;
 }
 
 #pragma mark -
